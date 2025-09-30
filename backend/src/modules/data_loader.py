@@ -582,7 +582,7 @@ class DataLoaderModule:
     async def load_financial_data(self) -> pd.DataFrame:
         """Load UK financial market data with proper error handling"""
         try:
-            api_key = "ZFRMQQL0IO2ZIPNS"
+            api_key = os.getenv('alphavantage1')
             if not api_key:
                 logger.warning("Alpha Vantage API key not configured")
                 return self._get_sample_financial_data()
