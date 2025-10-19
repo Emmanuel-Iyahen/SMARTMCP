@@ -68,12 +68,19 @@ class AIAnalyzerModule:
         """Analyze data based on user prompt and sector"""
         try:
             logger.info(f"📊 Analyzing: '{prompt}' for {sector}")
+
+            
             
             # Get relevant data
             data = await self._get_sector_data(sector)
 
-            #print('this is sector data', data)
-            
+            if sector == 'finance':
+                # Get latest entry for each symbol
+                limited_data = data.drop_duplicates(subset=['SYMBOL'], keep='first')
+                data = limited_data
+
+
+          
             # Generate insights based on whether OpenAI is available
             if self.client_available:
                 logger.info("🤖 Using AI-powered analysis")
@@ -108,7 +115,7 @@ class AIAnalyzerModule:
             # Prepare data sample for the AI
             if not data.empty:
                 # data_sample = f"Data sample ({len(data)} records): {data.head(2).to_dict('records')}"
-                data_sample = f"Complete transport data ({len(data)} lines): {data.to_dict('records')}"
+                data_sample = f"Complete recent data ({len(data)} lines): {data.to_dict('records')}"
             else:
                 data_sample = "No data available"
             
@@ -225,13 +232,6 @@ class AIAnalyzerModule:
             insights.append(f"**Average Price:** £{avg_price:.2f}/MWh")
         return insights
     
-    def _get_transport_insights(self, data: pd.DataFrame) -> List[str]:
-        """Generate transport-specific insights"""
-        insights = []
-        if 'delay_minutes' in data.columns and not data.empty:
-            avg_delay = data['delay_minutes'].mean()
-            insights.append(f"**Average Delay:** {avg_delay:.1f} minutes")
-        return insights
     
     def _get_finance_insights(self, data: pd.DataFrame) -> List[str]:
         """Generate finance-specific insights"""
@@ -314,18 +314,19 @@ class AIAnalyzerModule:
                     if 'timestamp' in real_data.columns:
                         print(f"⏰ Data range: {real_data['timestamp'].min()} to {real_data['timestamp'].max()}")
 
+                return real_data
+
 
             elif sector == "finance":
 
-                print('💰 Finance sector detected..........................')
                 try:
-                    real_data = await data_loader.load_financial_data()
+                    real_data = await data_loader.load_financial_data_from_snowflake()
                     print(f"📈 AI Analyzer loaded financial data: {len(real_data)} rows")
                     
                     if not real_data.empty:
                         print(f"📊 Financial data columns: {list(real_data.columns)}")
-                        print(f"📅 Data date range: {real_data['timestamp'].min()} to {real_data['timestamp'].max()}")
-                        print(f"🏢 Companies: {real_data['company_name'].unique()}")
+                        # print(f"📅 Data date range: {real_data['timestamp'].min()} to {real_data['timestamp'].max()}")
+                        # print(f"🏢 Companies: {real_data['company_name'].unique()}")
                         
                         # Return the DataFrame directly, not a dictionary
                         return real_data
@@ -337,42 +338,6 @@ class AIAnalyzerModule:
                     print(f"❌ Error loading finance data: {e}")
                     return pd.DataFrame()
 
-
-            # elif sector == "finance":
-
-            #     print('💰 Finance sector detected..........................')
-            #     try:
-            #         real_data = await data_loader.load_financial_data()
-            #         print(f"📈 AI Analyzer loaded financial data: {len(real_data)} rows")
-                    
-            #         if not real_data.empty:
-            #             print(f"📊 Financial data columns: {list(real_data.columns)}")
-            #             print(f"📅 Data date range: {real_data['timestamp'].min()} to {real_data['timestamp'].max()}")
-            #             print(f"🏢 Companies: {real_data['company_name'].unique()}")
-                        
-            #             # Analyze company performance
-            #             performance_summary = self._analyze_company_performance(real_data)
-                        
-            #             return {
-            #                 'raw_data': real_data,
-            #                 'performance_summary': performance_summary,
-            #                 'simplified_data': self._prepare_simplified_financial_data(real_data)
-            #             }
-            #         else:
-            #             print("❌ No financial data available")
-            #             return {
-            #                 'raw_data': pd.DataFrame(),
-            #                 'performance_summary': {},
-            #                 'simplified_data': []
-            #             }
-                        
-            #     except Exception as e:
-            #         print(f"❌ Error loading finance data: {e}")
-            #         return {
-            #             'raw_data': pd.DataFrame(),
-            #             'performance_summary': {},
-            #             'simplified_data': []
-            #         }
                 
         except Exception as e:
             print(f"❌ Error loading finance data: {e}")

@@ -25,7 +25,7 @@ class DashboardService:
                 #self._get_energy_overview(),
                 self._get_transport_overview(),
                 self._get_weather_overview(),
-                self._get_financial_overview(),  # Add this line
+                self._get_financial_overview(),  
             )
             
             return {
@@ -43,40 +43,8 @@ class DashboardService:
         except Exception as e:
             logger.error(f"Error getting dashboard overview: {e}")
             raise
-    
-    async def get_sector_dashboard(self, sector: str, timeframe: str = "7d") -> Dict[str, Any]:
-        """Get detailed dashboard for a specific sector"""
-        try:
-            if sector == 'energy':
-                data = await self._get_energy_detailed(timeframe)
-            elif sector == 'transportation':
-                data = await self._get_transport_detailed(timeframe)
-            elif sector == 'finance':
-                data = await self._get_financial_detailed(timeframe)
-            elif sector == 'weather':
-                data = await self._get_weather_detailed(timeframe)
-            else:
-                raise ValueError(f"Unsupported sector: {sector}")
-            
-            # Generate visualizations
-            visualizations = self.visualization.generate_dashboard({sector: data['timeseries']})
-            
-            return {
-                'sector': sector,
-                'timeframe': timeframe,
-                'metrics': data['metrics'],
-                'trends': data['trends'],
-                'alerts': await self._generate_alerts(sector, data),
-                'visualizations': visualizations.get(sector, {}),
-                'recommendations': await self._generate_sector_recommendations(sector, data)
-            }
-        except Exception as e:
-            logger.error(f"Error getting sector dashboard for {sector}: {e}")
-            raise
-    
 
     
-
 
     async def _get_transport_overview(self) -> Dict[str, Any]:
 
@@ -106,6 +74,7 @@ class DashboardService:
             total_delays = len(actual_delays)
             
             delay_percentage = (total_delays / total_lines) * 100 if total_lines > 0 else 0
+
             
             # Prepare chart data
             chart_data = self._prepare_transport_chart_data(transport_data)
@@ -119,11 +88,11 @@ class DashboardService:
             
             # Calculate trend based on actual delays
             if delay_percentage > 30:
-                trend = 'up'  # More delays = trend up (bad)
+                trend = 'poor'  # More delays = trend up (bad)
             elif delay_percentage > 10:
                 trend = 'stable'
             else:
-                trend = 'down'  # Few delays = trend down (good)
+                trend = 'excellent'  # Few delays = trend down (good)
             
             return {
                 'total_lines': total_lines,
@@ -192,16 +161,13 @@ class DashboardService:
             return []
 
 
-    
-
-
 
     async def _get_weather_overview(self) -> Dict[str, Any]:
 
         """Get weather overview with enhanced data"""
         try:
             weather_data = await self.data_loader.load_weather_data()
-            print('weather data from overview: ', weather_data)
+            #print('weather data from overview: ', weather_data)
             
             # Enhanced weather data processing
             if isinstance(weather_data, pd.DataFrame) and not weather_data.empty:
@@ -363,7 +329,6 @@ class DashboardService:
             ]
     }
     
-
     
     async def _get_transport_detailed(self, timeframe: str) -> Dict[str, Any]:
         """Get detailed transport analysis"""
@@ -450,29 +415,12 @@ class DashboardService:
         
         return df[df['timestamp'] >= cutoff]
     
-    # Additional helper methods for each sector analysis...
-    async def _check_energy_alerts(self, energy_data: pd.DataFrame) -> List[Dict]:
-        """Check for energy price alerts"""
-        alerts = []
-        if not energy_data.empty:
-            recent_prices = energy_data['price'].tail(6)  # Last 6 periods
-            if len(recent_prices) >= 6:
-                volatility = recent_prices.std()
-                if volatility > recent_prices.mean() * 0.1:  # More than 10% volatility
-                    alerts.append({
-                        'type': 'high_volatility',
-                        'message': 'High energy price volatility detected',
-                        'severity': 'warning'
-                    })
-        
-        return alerts
-    
-        
+
 
 
     async def _identify_major_transport_issues(self, transport_data: List[Dict]) -> List[Dict]:
             
-        """Identify actual major transport issues - FIXED VERSION"""
+        """Identify actual major transport issues"""
         major_issues = []
         
         if not transport_data or not isinstance(transport_data, list):
@@ -494,7 +442,7 @@ class DashboardService:
                         except (ValueError, TypeError):
                             delay_minutes = 0
                     
-                    # FIX: Only consider it a major issue if it's NOT "Good Service"
+                    #Only consider it a major issue if it's NOT "Good Service"
                     # and has significant delay or problematic status
                     is_problematic = (
                         status != 'Good Service' and 
@@ -518,7 +466,7 @@ class DashboardService:
                                 'type': issue_type,
                                 'severity': self._assess_issue_severity(status, delay_minutes)
                             })
-                            logger.info(f"MAJOR ISSUE: {line_name} - {status} - {delay_minutes}min - {issue_type}")
+                            #logger.info(f"MAJOR ISSUE: {line_name} - {status} - {delay_minutes}min - {issue_type}")
             
             # Sort by severity (delay minutes and status type)
             major_issues.sort(key=lambda x: (x['delay'], 1 if x['status'] != 'Good Service' else 0), reverse=True)
@@ -562,7 +510,6 @@ class DashboardService:
             return 'info'
 
 
-
     
     async def _get_top_movers(self, financial_data: pd.DataFrame) -> List[Dict]:
         """Get top moving stocks"""
@@ -586,8 +533,6 @@ class DashboardService:
         return sorted(movers, key=lambda x: abs(x['change']), reverse=True)[:5]
 
 
-    
-        # Add these missing methods to your DashboardService class
 
     async def _assess_market_outlook(self, sector_data: Dict[str, Any]) -> str:
         """Assess market outlook based on sector data"""
@@ -768,13 +713,10 @@ class DashboardService:
 
 
 
-        # Add these methods to your DashboardService class
-
     async def _get_financial_overview(self) -> Dict[str, Any]:
         """Get financial market overview from Snowflake"""
         try:
             financial_data = await self.data_loader.load_financial_data_from_snowflake()
-            print('Financial data from overview: ', financial_data)
             
             if isinstance(financial_data, pd.DataFrame) and not financial_data.empty:
                 return self._process_financial_data(financial_data)
@@ -784,163 +726,121 @@ class DashboardService:
         except Exception as e:
             logger.error(f"Error in financial overview: {e}")
             return self._get_sample_financial_overview()
+        
+
 
 
     def _process_financial_data(self, financial_data: pd.DataFrame) -> Dict[str, Any]:
-
         """Process financial data for dashboard display"""
         try:
-            # Convert numpy types to native Python types first
             financial_data = financial_data.copy()
+
+            # --- 1️⃣ Normalize datatypes ---
+            import numpy as np
+            financial_data['TIMESTAMP'] = pd.to_datetime(financial_data['TIMESTAMP'], errors='coerce')
+            
+            # Convert to date (to handle multiple entries on same day)
+            financial_data['DATE'] = financial_data['TIMESTAMP'].dt.date
+            
             for col in financial_data.columns:
                 if financial_data[col].dtype in [np.int64, np.int32]:
                     financial_data[col] = financial_data[col].astype(int)
                 elif financial_data[col].dtype in [np.float64, np.float32]:
                     financial_data[col] = financial_data[col].astype(float)
+
+            # --- 2️⃣ Get unique dates per symbol (remove duplicates) ---
+            # Keep only the last entry for each symbol on each day
+            financial_data = financial_data.sort_values(['SYMBOL', 'TIMESTAMP'], ascending=True)
+            financial_data = financial_data.drop_duplicates(['SYMBOL', 'DATE'], keep='last')
             
-            # Get latest data for each symbol
-            latest_data = financial_data.sort_values('TIMESTAMP').groupby('SYMBOL').last().reset_index()
+            # --- 3️⃣ Ensure we have at least 2 days of data per symbol ---
+            symbol_day_counts = financial_data.groupby('SYMBOL')['DATE'].nunique()
+            valid_symbols = symbol_day_counts[symbol_day_counts >= 2].index
+            financial_data = financial_data[financial_data['SYMBOL'].isin(valid_symbols)]
             
-            # Calculate daily changes for ALL stocks
+            if financial_data.empty:
+                logger.warning("No symbols with sufficient data for change calculation")
+                return self._get_sample_financial_overview()
+
+            # --- 4️⃣ Compute daily changes ---
             all_stocks = []
             daily_changes = []
-            
-            for symbol in latest_data['SYMBOL'].unique():
-                symbol_data = financial_data[financial_data['SYMBOL'] == symbol].sort_values('TIMESTAMP')
+
+            for symbol, symbol_data in financial_data.groupby('SYMBOL'):
+                symbol_data = symbol_data.sort_values('TIMESTAMP', ascending=True)
+                
+                # Get the last two unique days
                 if len(symbol_data) >= 2:
-                    current_close = float(symbol_data['CLOSE_PRICE'].iloc[-1])
-                    previous_close = float(symbol_data['CLOSE_PRICE'].iloc[-2])
-                    change_percent = ((current_close - previous_close) / previous_close) * 100
+                    current_day = symbol_data.iloc[-1]
+                    previous_day = symbol_data.iloc[-2]
                     
+                    current_close = float(current_day['CLOSE'])
+                    previous_close = float(previous_day['CLOSE'])
+                    
+                    if previous_close != 0:
+                        change_percent = ((current_close - previous_close) / previous_close) * 100
+                    else:
+                        change_percent = 0.0
+
                     stock_data = {
                         'symbol': str(symbol),
-                        'company': str(symbol_data['COMPANY_NAME'].iloc[-1]),
-                        'current_price': float(current_close),
-                        'change_percent': float(change_percent),
-                        'volume': int(symbol_data['VOLUME'].iloc[-1]),
-                        'sector': str(symbol_data['SECTOR'].iloc[-1])
+                        'company': str(current_day['COMPANY_NAME']),
+                        'current_price': round(current_close, 2),
+                        'change_percent': round(change_percent, 2),
+                        'volume': int(current_day['VOLUME']),
                     }
-                    
+
                     all_stocks.append(stock_data)
                     daily_changes.append(stock_data)
-            
-            # Sort all stocks by change percentage (best to worst)
+
+            # --- 5️⃣ If still no data, return sample ---
+            if not daily_changes:
+                logger.warning("No daily changes calculated, returning sample data")
+                return self._get_sample_financial_overview()
+
+            # --- 6️⃣ Sort stocks by performance ---
             all_stocks.sort(key=lambda x: x['change_percent'], reverse=True)
-            
-            # Sort by absolute change for top movers
             daily_changes.sort(key=lambda x: abs(x['change_percent']), reverse=True)
-            top_gainers = [stock for stock in daily_changes if stock['change_percent'] > 0][:3]
-            top_losers = [stock for stock in daily_changes if stock['change_percent'] < 0][:3]
-            
-            # Calculate market metrics
-            total_change = sum(stock['change_percent'] for stock in daily_changes)
-            avg_change = float(total_change / len(daily_changes)) if daily_changes else 0.0
-            advancing = len([s for s in daily_changes if s['change_percent'] > 0])
-            declining = len([s for s in daily_changes if s['change_percent'] < 0])
-            unchanged = len([s for s in daily_changes if s['change_percent'] == 0])
-            
-            # Prepare chart data (price trends for top stocks)
+
+            top_gainers = [s for s in daily_changes if s['change_percent'] > 0][:3]
+            top_losers = [s for s in daily_changes if s['change_percent'] < 0][:3]
+
+            # --- 7️⃣ Market metrics ---
+            total_change = sum(s['change_percent'] for s in daily_changes)
+            avg_change = total_change / len(daily_changes) if daily_changes else 0.0
+            advancing = sum(1 for s in daily_changes if s['change_percent'] > 0)
+            declining = sum(1 for s in daily_changes if s['change_percent'] < 0)
+            unchanged = sum(1 for s in daily_changes if s['change_percent'] == 0)
+
+            # --- 8️⃣ Chart data ---
             chart_data = self._prepare_financial_chart_data(financial_data)
-            
-            # Determine market trend
+
+            # --- 9️⃣ Market trend detection ---
             if avg_change > 1:
                 trend = 'bullish'
             elif avg_change < -1:
                 trend = 'bearish'
             else:
                 trend = 'neutral'
-            
+
             return {
                 'market_trend': trend,
                 'average_change': round(avg_change, 2),
-                'advancing_stocks': int(advancing),
-                'declining_stocks': int(declining),
-                'unchanged_stocks': int(unchanged),
-                'total_stocks': int(len(daily_changes)),
-                'all_stocks': all_stocks,  # Add this line - all stocks sorted by performance
+                'advancing_stocks': advancing,
+                'declining_stocks': declining,
+                'unchanged_stocks': unchanged,
+                'total_stocks': len(daily_changes),
+                'all_stocks': all_stocks,
                 'top_gainers': top_gainers,
                 'top_losers': top_losers,
                 'chart_data': chart_data,
                 'market_summary': self._generate_market_summary(avg_change, trend, advancing, declining),
-                'alerts': self._generate_financial_alerts(daily_changes, avg_change)
+                'alerts': self._generate_financial_alerts(daily_changes, avg_change),
             }
-            
+
         except Exception as e:
             logger.error(f"Error processing financial data: {e}")
             return self._get_sample_financial_overview()
-
-    # def _process_financial_data(self, financial_data: pd.DataFrame) -> Dict[str, Any]:
-    #     """Process financial data for dashboard display"""
-    #     try:
-    #         # Convert numpy types to native Python types first
-    #         financial_data = financial_data.copy()
-    #         for col in financial_data.columns:
-    #             if financial_data[col].dtype in [np.int64, np.int32]:
-    #                 financial_data[col] = financial_data[col].astype(int)
-    #             elif financial_data[col].dtype in [np.float64, np.float32]:
-    #                 financial_data[col] = financial_data[col].astype(float)
-            
-    #         # Get latest data for each symbol
-    #         latest_data = financial_data.sort_values('TIMESTAMP').groupby('SYMBOL').last().reset_index()
-            
-    #         # Calculate daily changes
-    #         daily_changes = []
-    #         for symbol in latest_data['SYMBOL'].unique():
-    #             symbol_data = financial_data[financial_data['SYMBOL'] == symbol].sort_values('TIMESTAMP')
-    #             if len(symbol_data) >= 2:
-    #                 current_close = float(symbol_data['CLOSE_PRICE'].iloc[-1])
-    #                 previous_close = float(symbol_data['CLOSE_PRICE'].iloc[-2])
-    #                 change_percent = ((current_close - previous_close) / previous_close) * 100
-                    
-    #                 daily_changes.append({
-    #                     'symbol': str(symbol),
-    #                     'company': str(symbol_data['COMPANY_NAME'].iloc[-1]),
-    #                     'current_price': float(current_close),
-    #                     'change_percent': float(change_percent),
-    #                     'volume': int(symbol_data['VOLUME'].iloc[-1]),
-    #                     'sector': str(symbol_data['SECTOR'].iloc[-1])
-    #                 })
-            
-    #         # Sort by absolute change for top movers
-    #         daily_changes.sort(key=lambda x: abs(x['change_percent']), reverse=True)
-    #         top_gainers = [stock for stock in daily_changes if stock['change_percent'] > 0][:3]
-    #         top_losers = [stock for stock in daily_changes if stock['change_percent'] < 0][:3]
-            
-    #         # Calculate market metrics
-    #         total_change = sum(stock['change_percent'] for stock in daily_changes)
-    #         avg_change = float(total_change / len(daily_changes)) if daily_changes else 0.0
-    #         advancing = len([s for s in daily_changes if s['change_percent'] > 0])
-    #         declining = len([s for s in daily_changes if s['change_percent'] < 0])
-    #         unchanged = len([s for s in daily_changes if s['change_percent'] == 0])
-            
-    #         # Prepare chart data (price trends for top stocks)
-    #         chart_data = self._prepare_financial_chart_data(financial_data)
-            
-    #         # Determine market trend
-    #         if avg_change > 1:
-    #             trend = 'bullish'
-    #         elif avg_change < -1:
-    #             trend = 'bearish'
-    #         else:
-    #             trend = 'neutral'
-            
-    #         return {
-    #             'market_trend': trend,
-    #             'average_change': round(avg_change, 2),
-    #             'advancing_stocks': int(advancing),
-    #             'declining_stocks': int(declining),
-    #             'unchanged_stocks': int(unchanged),
-    #             'total_stocks': int(len(daily_changes)),
-    #             'top_gainers': top_gainers,
-    #             'top_losers': top_losers,
-    #             'chart_data': chart_data,
-    #             'market_summary': self._generate_market_summary(avg_change, trend, advancing, declining),
-    #             'alerts': self._generate_financial_alerts(daily_changes, avg_change)
-    #         }
-            
-    #     except Exception as e:
-    #         logger.error(f"Error processing financial data: {e}")
-    #         return self._get_sample_financial_overview()
         
 
     def _prepare_financial_chart_data(self, financial_data: pd.DataFrame) -> List[Dict]:
@@ -949,7 +849,7 @@ class DashboardService:
             chart_data = []
             # Convert numpy types first
             financial_data = financial_data.copy()
-            financial_data['CLOSE_PRICE'] = financial_data['CLOSE_PRICE'].astype(float)
+            financial_data['CLOSE'] = financial_data['CLOSE'].astype(float)
             
             # Get data for last 7 days
             recent_data = financial_data[financial_data['TIMESTAMP'] >= (datetime.now() - timedelta(days=7))]
@@ -959,14 +859,14 @@ class DashboardService:
                 
             # Group by date and calculate average market performance
             daily_avg = recent_data.groupby('TIMESTAMP').agg({
-                'CLOSE_PRICE': 'mean',
+                'CLOSE': 'mean',
                 'SYMBOL': 'count'
             }).reset_index()
             
             for _, row in daily_avg.iterrows():
                 chart_data.append({
                     'timestamp': row['TIMESTAMP'].isoformat() if hasattr(row['TIMESTAMP'], 'isoformat') else str(row['TIMESTAMP']),
-                    'price': float(row['CLOSE_PRICE']),
+                    'price': float(row['CLOSE']),
                     'stocks_traded': int(row['SYMBOL'])
                 })
             

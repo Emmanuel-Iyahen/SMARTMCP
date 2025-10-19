@@ -37,17 +37,51 @@ class DataLoaderModule:
     def _init_snowflake(self):
         """Initialize Snowflake connection with environment variables"""
         try:
-            return snowflake.connector.connect(
-                user=os.getenv('SNOWFLAKE_USER', 'TOWNBOX'),
-                password=os.getenv('SNOWFLAKE_PASSWORD', 'Seniorman007123$'),
-                account=os.getenv('SNOWFLAKE_ACCOUNT', 'JSCNGPR-BX68045'),
-                warehouse=os.getenv('SNOWFLAKE_WAREHOUSE', 'MCP_WH'),
-                database=os.getenv('SNOWFLAKE_DATABASE', 'MCP_PLATFORM'),
-                schema=os.getenv('SNOWFLAKE_SCHEMA', 'TRANSPORT')
+            user = os.getenv("user")
+            password = os.getenv("password")
+            account = os.getenv("account")
+            warehouse = os.getenv("warehouse")
+            database = os.getenv("database")
+            schema = os.getenv("schema")
+
+            if not all([user, password, account]):
+                logger.warning("⚠️ Missing Snowflake credentials in environment variables.")
+                return None
+            
+            #logger.info(f"🔧 Connecting to Snowflake as {user}@{account} [{database}.{schema}]...")
+
+            conn = snowflake.connector.connect(
+                user=user,
+                password=password,
+                account=account,
+                warehouse=warehouse,
+                database=database,
+                schema=schema
             )
+            logger.info("✅ Successfully connected to Snowflake.")
+            return conn
+
         except Exception as e:
             logger.error(f"Failed to connect to Snowflake: {e}")
             return None
+        
+
+    def test_snowflake_connection(self):
+
+        """Simple test to verify Snowflake connection initialization"""
+        if self.snowflake_conn is None:
+            print("❌ Test Failed: self.snowflake_conn is None — connection was not initialized.")
+            return False
+        try:
+            cur = self.snowflake_conn.cursor()
+            cur.execute("SELECT CURRENT_VERSION()")
+            version = cur.fetchone()
+            print(f"✅ Test Passed: Connected to Snowflake. Version: {version[0]}")
+            return True
+        except Exception as e:
+            print(f"❌ Test Failed: Exception during query — {e}")
+            return False
+
     
     async def load_data(self, source_type: str, config: Dict) -> pd.DataFrame:
         """Load data from various sources with error handling"""
@@ -61,51 +95,28 @@ class DataLoaderModule:
             logger.error(f"Error loading data from {source_type}: {e}")
             return pd.DataFrame()  # Return empty DataFrame on error
         
-    async def store_in_snowflake(self, df: pd.DataFrame, table_name: str):
-        
-        """Store DataFrame in Snowflake with proper error handling"""
-        try:
-            if df.empty:
-                print(f"⚠️ No data to store in {table_name}")
-                return
-            
-            # Convert DataFrame to list of tuples
-            records = [tuple(x) for x in df.to_numpy()]
-            columns = ', '.join(df.columns)
-            placeholders = ', '.join(['%s'] * len(df.columns))
-            
-            query = f"INSERT INTO {table_name} ({columns}) VALUES ({placeholders})"
-            
-            with self.snowflake_conn.cursor() as cursor:
-                cursor.executemany(query, records)
-            
-            self.snowflake_conn.commit()
-            print(f"✅ Stored {len(records)} records in {table_name}")
-            
-        except Exception as e:
-            print(f"❌ Error storing data in Snowflake table {table_name}: {e}")
-            # Don't raise exception to avoid breaking the main flow
+
     
-    async def load_uk_energy_data(self) -> pd.DataFrame:
-        """Load real UK energy data from Carbon Intensity API"""
-        try:
-            config = {
-                'url': 'https://api.carbonintensity.org.uk/generation',
-                'headers': {'Accept': 'application/json'},
-                'timeout': 30,
-                'data_key': 'data'  # Extract data from the 'data' key
-            }
+    # async def load_uk_energy_data(self) -> pd.DataFrame:
+    #     """Load real UK energy data from Carbon Intensity API"""
+    #     try:
+    #         config = {
+    #             'url': 'https://api.carbonintensity.org.uk/generation',
+    #             'headers': {'Accept': 'application/json'},
+    #             'timeout': 30,
+    #             'data_key': 'data'  # Extract data from the 'data' key
+    #         }
             
-            data = await self.load_data('api', config)
-            if not data.empty:
-                return self._process_energy_data(data)
+    #         data = await self.load_data('api', config)
+    #         if not data.empty:
+    #             return self._process_energy_data(data)
             
-            # Fallback to sample data if API fails
-            return self._get_sample_energy_data()
+    #         # Fallback to sample data if API fails
+    #         return self._get_sample_energy_data()
             
-        except Exception as e:
-            logger.error(f"Error loading energy data: {e}")
-            return self._get_sample_energy_data()
+    #     except Exception as e:
+    #         logger.error(f"Error loading energy data: {e}")
+    #         return self._get_sample_energy_data()
         
 
 
@@ -136,11 +147,7 @@ class DataLoaderModule:
 
             
             if not raw_data.empty:
-                #load_id = await self._store_raw_transport_data(raw_data, config['url'])
                 processed_data = self._process_tfl_data(raw_data)
-
-            # Store processed data - only pass the DataFrame
-                store_success = await self.store_processed_transport_data_simple(processed_data)
 
                 
                 if not processed_data.empty:
@@ -157,69 +164,6 @@ class DataLoaderModule:
             return self._get_sample_transport_data()
         
 
-
-    async def _store_raw_transport_data(self, raw_data: pd.DataFrame, api_url: str) -> str:
-        """Store raw TFL API response in Snowflake"""
-        try:
-            if self.snowflake_conn is None:
-                print("⚠️ Snowflake not connected, skipping raw data storage")
-                return "NO_SNOWFLAKE"
-            
-            print(f"🔍 DEBUG: Converting {len(raw_data)} rows manually...")
-            
-            # Manually build JSON array from each row
-            records = []
-            for i in range(len(raw_data)):
-                row = raw_data.iloc[i]
-                row_dict = row.to_dict()
-                records.append(row_dict)
-            
-            # Convert to JSON string
-            raw_json = json.dumps(records)
-            
-            print(f"📊 Manual JSON conversion: {len(raw_json)} chars")
-            print(f"📊 JSON starts with: {raw_json[:200]}...")
-            print(f"📊 JSON ends with: ...{raw_json[-100:]}")
-            
-            # Verify
-            parsed = json.loads(raw_json)
-            print(f"✅ Manual conversion created array with {len(parsed)} items")
-            
-            # Your working approach
-            insert_query = """
-                INSERT INTO TRANSPORT_DATA_RAW_NEW (
-                    api_url, raw_response, response_metadata, record_count
-                ) VALUES (%s, %s, %s, %s)
-            """
-            
-            metadata = {
-                'data_source': 'TFL API',
-                'endpoint': api_url,
-                'processing_time': datetime.utcnow().isoformat(),
-                'parameters': {
-                    'modes': 'tube,overground,dlr',
-                    'detail': 'true'
-                }
-            }
-            
-            with self.snowflake_conn.cursor() as cursor:
-                cursor.execute(insert_query, (
-                    api_url,
-                    raw_json,
-                    json.dumps(metadata),
-                    len(raw_data)
-                ))
-                self.snowflake_conn.commit()
-            
-            load_id = f"TFL_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
-            print(f"✅ Stored {len(parsed)} records with load_id: {load_id}")
-            return load_id
-            
-        except Exception as e:
-            print(f"❌ Error storing raw transport data: {e}")
-            import traceback
-            print(f"🔍 Full traceback: {traceback.format_exc()}")
-            return f"ERROR_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
         
 
     def _process_tfl_data(self, raw_data: pd.DataFrame) -> pd.DataFrame:
@@ -533,146 +477,102 @@ class DataLoaderModule:
 
 
 
-
-    def _process_alpha_vantage_data_fixed(self, data: pd.DataFrame, symbol: str) -> pd.DataFrame:
+    
+    # async def load_financial_data(self) -> pd.DataFrame:
+    #     """Load UK financial market data with proper error handling"""
+    #     try:
+    #         api_key = os.getenv('alphavantage1')
+    #         if not api_key:
+    #             logger.warning("Alpha Vantage API key not configured")
+    #             return self._get_sample_financial_data()
             
-        """Process Alpha Vantage data from the column-based format to row-based OHLC"""
-        try:
-            company_names = {
-                'HSBA.L': 'HSBC Holdings',
-                'BP.L': 'BP',
-                'GSK.L': 'GSK', 
-                'ULVR.L': 'Unilever',
-                'AZN.L': 'AstraZeneca',
-                'RIO.L': 'Rio Tinto',
-                'LLOY.L': 'Lloyds Banking Group',
-                'BARC.L': 'Barclays',
-                'TSCO.L': 'Tesco'
-            }
+    #         symbols = [
+    #             'HSBA.L',  # HSBC Holdings
+    #             'BP.L',    # BP
+    #             'GSK.L',   # GSK
+    #             'ULVR.L',  # Unilever
+    #             'AZN.L',   # AstraZeneca
+    #             'RIO.L',   # Rio Tinto
+    #             'LLOY.L',  # Lloyds Banking Group
+    #             'BARC.L',  # Barclays
+    #             'TSCO.L',  # Tesco
+    #         ]
             
-            records = []
+    #         all_data = []
             
-            # Iterate through each row (each row is a company)
-            for _, row in data.iterrows():
-                if row['symbol'] == symbol:  # Only process the current symbol
-                    # Iterate through date columns (all columns except the last few)
-                    for col in data.columns:
-                        if col not in ['symbol', 'company_name'] and isinstance(row[col], dict):
-                            date_str = col
-                            ohlc_data = row[col]
-                            
-                            records.append({
-                                'timestamp': pd.to_datetime(date_str),
-                                'symbol': symbol,
-                                'company_name': company_names.get(symbol, symbol),
-                                'open': float(ohlc_data.get('1. open', 0)),
-                                'high': float(ohlc_data.get('2. high', 0)),
-                                'low': float(ohlc_data.get('3. low', 0)),
-                                'close': float(ohlc_data.get('4. close', 0)),
-                                'volume': int(ohlc_data.get('5. volume', 0))
-                            })
-            
-            return pd.DataFrame(records)
-            
-        except Exception as e:
-            print(f"Error processing Alpha Vantage data for {symbol}: {e}")
-            return pd.DataFrame()
-        
-
-    async def load_financial_data(self) -> pd.DataFrame:
-        """Load UK financial market data with proper error handling"""
-        try:
-            api_key = os.getenv('alphavantage1')
-            if not api_key:
-                logger.warning("Alpha Vantage API key not configured")
-                return self._get_sample_financial_data()
-            
-            symbols = [
-                'HSBA.L',  # HSBC Holdings
-                'BP.L',    # BP
-                'GSK.L',   # GSK
-                'ULVR.L',  # Unilever
-                'AZN.L',   # AstraZeneca
-                'RIO.L',   # Rio Tinto
-                'LLOY.L',  # Lloyds Banking Group
-                'BARC.L',  # Barclays
-                'TSCO.L',  # Tesco
-            ]
-            
-            all_data = []
-            
-            for symbol in symbols:
-                try:
-                    config = {
-                        'url': 'https://www.alphavantage.co/query',
-                        'params': {
-                            'function': 'TIME_SERIES_DAILY',
-                            'symbol': symbol,
-                            'apikey': api_key,
-                            'outputsize': 'compact'
-                        },
-                        'timeout': 30
-                    }
+    #         for symbol in symbols:
+    #             try:
+    #                 config = {
+    #                     'url': 'https://www.alphavantage.co/query',
+    #                     'params': {
+    #                         'function': 'TIME_SERIES_DAILY',
+    #                         'symbol': symbol,
+    #                         'apikey': api_key,
+    #                         'outputsize': 'compact'
+    #                     },
+    #                     'timeout': 30
+    #                 }
                     
-                    # Use your existing load_data method
-                    data = await self.load_data('api', config)
-                    print(f"🔍 Raw data for {symbol}:")
-                    print(f"   Shape: {data.shape}")
-                    print(f"   Columns: {list(data.columns)}")
+    #                 # Use your existing load_data method
+    #                 data = await self.load_data('api', config)
+    #                 print(f"🔍 Raw data for {symbol}:")
+    #                 print(f"   Shape: {data.shape}")
+    #                 print(f"   Columns: {list(data.columns)}")
                     
-                    if not data.empty:
-                        # Debug what's actually in the data
-                        print(f"   First row: {data.iloc[0].to_dict()}")
+    #                 if not data.empty:
+    #                     # Debug what's actually in the data
                         
-                        # Check if it's an error message
-                        if 'Information' in data.columns:
-                            info_msg = data['Information'].iloc[0]
-                            print(f"❌ API Info for {symbol}: {info_msg}")
-                            continue
-                        elif 'Error Message' in data.columns:
-                            error_msg = data['Error Message'].iloc[0]
-                            print(f"❌ API Error for {symbol}: {error_msg}")
-                            continue
-                        elif 'Note' in data.columns:
-                            note_msg = data['Note'].iloc[0]
-                            print(f"💡 API Note for {symbol}: {note_msg}")
-                            continue
                         
-                        # Try to process the data
-                        processed_data = self._process_alpha_vantage_data_fixed(data, symbol)
-                        if not processed_data.empty:
-                            store_in_snowflake = await self.store_processed_financial_data_simple(processed_data)
-                            if store_in_snowflake:
-                                print('stored in snowflake')
-                            else:
-                                print('snowflake storage failed')
-                            all_data.append(processed_data)
-                            print(f"✅ Processed data for {symbol}: {len(processed_data)} records")
-                        else:
-                            print(f"❌ No processed data for {symbol}")
-                    else:
-                        print(f"❌ Empty data for {symbol}")
+    #                     # Check if it's an error message
+    #                     if 'Information' in data.columns:
+    #                         info_msg = data['Information'].iloc[0]
+    #                         print(f"❌ API Info for {symbol}: {info_msg}")
+    #                         continue
+    #                     elif 'Error Message' in data.columns:
+    #                         error_msg = data['Error Message'].iloc[0]
+    #                         print(f"❌ API Error for {symbol}: {error_msg}")
+    #                         continue
+    #                     elif 'Note' in data.columns:
+    #                         note_msg = data['Note'].iloc[0]
+    #                         print(f"💡 API Note for {symbol}: {note_msg}") 
+    #                         continue
+                        
+    #                     # Try to process the data
+    #                     processed_data = self._process_alpha_vantage_data_fixed(data, symbol)
+    #                     print('processed financial stock data to view snowflake structure: ', processed_data)
+    #                     if not processed_data.empty:
+    #                         store_in_snowflake = await self.store_processed_financial_data_simple(processed_data)
+    #                         if store_in_snowflake:
+    #                             print('stored in snowflake')
+    #                         else:
+    #                             print('snowflake storage failed')
+    #                         all_data.append(processed_data)
+    #                         print(f"✅ Processed data for {symbol}: {len(processed_data)} records")
+    #                     else:
+    #                         print(f"❌ No processed data for {symbol}")
+    #                 else:
+    #                     print(f"❌ Empty data for {symbol}")
                             
-                except Exception as e:
-                    print(f"❌ Error loading {symbol}: {e}")
-                    continue
+    #             except Exception as e:
+    #                 print(f"❌ Error loading {symbol}: {e}")
+    #                 continue
             
-            if all_data:
-                combined_data = pd.concat(all_data, ignore_index=True)
-                print(f"📊 Combined financial data: {len(combined_data)} total records")
+    #         if all_data:
+    #             combined_data = pd.concat(all_data, ignore_index=True)
+    #             print(f"📊 Combined financial data: {len(combined_data)} total records")
                 
-                if not combined_data.empty:
-                    print(f"📈 Sample processed data:")
-                    print(combined_data[['timestamp', 'symbol', 'company_name', 'close', 'volume']].head())
+    #             if not combined_data.empty:
+    #                 print(f"📈 Sample processed data:")
+    #                 print(combined_data[['timestamp', 'symbol', 'company_name', 'close', 'volume']].head())
                 
-                return combined_data
-            else:
-                print("📝 Using sample financial data - API may be rate limited")
-                return self._get_sample_financial_data()
+    #             return combined_data
+    #         else:
+    #             print("📝 Using sample financial data - API may be rate limited")
+    #             return self._get_sample_financial_data()
                     
-        except Exception as e:
-            logger.error(f"Error loading financial data: {e}")
-            return self._get_sample_financial_data()
+    #     except Exception as e:
+    #         logger.error(f"Error loading financial data: {e}")
+    #         return self._get_sample_financial_data()
 
     def _process_alpha_vantage_data_fixed(self, data: pd.DataFrame, symbol: str) -> pd.DataFrame:
         """Process Alpha Vantage data with better error handling"""
@@ -821,9 +721,7 @@ class DataLoaderModule:
             
             data = await self.load_data('api', config)
 
-            
-
-
+        
             if not data.empty:
                 return self._process_weather_data(data)
             
@@ -880,19 +778,7 @@ class DataLoaderModule:
         else:
             return 10  # Default for other statuses
     
-    # Sample data methods for development
-    def _get_sample_energy_data(self) -> pd.DataFrame:
-        """Sample energy data for development"""
-        return pd.DataFrame([
-            {
-                'timestamp': datetime.utcnow() - timedelta(hours=i),
-                'fuel_type': 'electricity',
-                'carbon_intensity': 180 + i * 2,
-                'forecast': 185 + i * 2,
-                'index': 'moderate'
-            }
-            for i in range(24, 0, -1)
-        ])
+
     
     def _get_sample_transport_data(self) -> pd.DataFrame:
         """Sample transport data for development"""
@@ -939,85 +825,6 @@ class DataLoaderModule:
             'location': 'London'
         }])
 
-
-
-
-    async def debug_table_structure(self):
-
-        """Debug the table structure to identify constraints or issues"""
-        cursor = None
-        try:
-            cursor = self.snowflake_conn.cursor()
-            
-            # Check table structure
-            cursor.execute(f"""
-                SELECT column_name, data_type, is_nullable
-                FROM {os.getenv('SNOWFLAKE_DATABASE', 'MCP_PLATFORM')}.INFORMATION_SCHEMA.COLUMNS 
-                WHERE table_name = 'TRANSPORT_DATA_PROCESSED' 
-                AND table_schema = '{os.getenv('SNOWFLAKE_SCHEMA', 'TRANSPORT')}'
-                ORDER BY ordinal_position
-            """)
-            
-            print("🔍 Table Structure:")
-            for col_name, data_type, is_nullable in cursor.fetchall():
-                print(f"   {col_name}: {data_type} (Nullable: {is_nullable})")
-                
-            # Check for constraints
-            cursor.execute(f"""
-                SELECT constraint_name, constraint_type
-                FROM {os.getenv('SNOWFLAKE_DATABASE', 'MCP_PLATFORM')}.INFORMATION_SCHEMA.TABLE_CONSTRAINTS 
-                WHERE table_name = 'TRANSPORT_DATA_PROCESSED' 
-                AND table_schema = '{os.getenv('SNOWFLAKE_SCHEMA', 'TRANSPORT')}'
-            """)
-            
-            constraints = cursor.fetchall()
-            if constraints:
-                print("🔍 Table Constraints:")
-                for const_name, const_type in constraints:
-                    print(f"   {const_name}: {const_type}")
-            else:
-                print("🔍 No table constraints found")
-                
-        except Exception as e:
-            print(f"❌ Error debugging table structure: {e}")
-        finally:
-            if cursor:
-                cursor.close()
-
-
-    async def store_processed_transport_data_simple(self, processed_data: pd.DataFrame) -> bool:
-        """Simplified approach using write_pandas"""
-        try:
-            if self.snowflake_conn is None:
-                print("⚠️ Snowflake not connected, skipping processed data storage")
-                return False
-            
-            # Use Snowflake's built-in method
-            from snowflake.connector.pandas_tools import write_pandas
-            
-            # Create a copy to avoid modifying the original DataFrame
-            df_to_store = processed_data.copy()
-            
-            # FIX 1: Convert all column names to uppercase
-            df_to_store.columns = [col.upper() for col in df_to_store.columns]
-            
-            
-            success, nchunks, nrows, _ = write_pandas(
-                conn=self.snowflake_conn,
-                df=df_to_store,
-                table_name='TRANSPORT_DATA_PROCESSED',
-                schema=os.getenv('SNOWFLAKE_SCHEMA', 'TRANSPORT'),
-                database=os.getenv('SNOWFLAKE_DATABASE', 'MCP_PLATFORM'),
-                auto_create_table=False,
-                overwrite=False
-            )
-            
-            print(f"📊 write_pandas result: success={success}, chunks={nchunks}, rows={nrows}")
-            return success
-            
-        except Exception as e:
-            print(f"❌ Error with write_pandas: {e}")
-            return False
         
 
 
@@ -1036,14 +843,20 @@ class DataLoaderModule:
             
             # FIX 1: Convert all column names to uppercase
             df_to_store.columns = [col.upper() for col in df_to_store.columns]
+
+            if 'TIMESTAMP' in df_to_store.columns:
+                df_to_store['TIMESTAMP'] = pd.to_datetime(df_to_store['TIMESTAMP'], errors='coerce')
+                df_to_store['TIMESTAMP'] = df_to_store['TIMESTAMP'].dt.strftime('%Y-%m-%d %H:%M:%S')
+
+            print('data types going to snowflake are:', df_to_store.dtypes)
             
             
             success, nchunks, nrows, _ = write_pandas(
                 conn=self.snowflake_conn,
                 df=df_to_store,
-                table_name='FINANCIAL_MARKET_DATA_TEST',
-                schema=os.getenv('SNOWFLAKE_SCHEMA', 'TRANSPORT'),
-                database=os.getenv('SNOWFLAKE_DATABASE', 'MCP_PLATFORM'),
+                table_name='FINANCIAL_MARKET_DATA_PROCESSED',
+                schema='FINANCE',
+                database='MCP_PLATFORM',
                 auto_create_table=False,
                 overwrite=False
             )
@@ -1068,14 +881,13 @@ class DataLoaderModule:
                 SELECT 
                     SYMBOL,
                     COMPANY_NAME,
-                    SECTOR,
-                    OPEN_PRICE,
-                    HIGH_PRICE,
-                    LOW_PRICE,
-                    CLOSE_PRICE,
+                    OPEN,
+                    HIGH,
+                    LOW,
+                    CLOSE,
                     VOLUME,
                     TIMESTAMP
-                FROM MCP_PLATFORM.TRANSPORT.financial_market_data 
+                FROM MCP_PLATFORM.FINANCE.FINANCIAL_MARKET_DATA_PROCESSED 
                 WHERE TIMESTAMP >= DATEADD(day, -7, CURRENT_DATE())
                 ORDER BY TIMESTAMP DESC, SYMBOL
                 """
@@ -1131,3 +943,219 @@ class DataLoaderModule:
                 })
         
         return pd.DataFrame(data)
+    
+
+
+    
+
+    async def load_financial_trend_data(self) -> pd.DataFrame:
+        """Load extended historical financial data from Snowflake for trend analysis"""
+        try:
+            if hasattr(self, 'snowflake_conn') and self.snowflake_conn:
+                query = """
+                SELECT 
+                    SYMBOL,
+                    COMPANY_NAME,
+                    OPEN,
+                    HIGH,
+                    LOW,
+                    CLOSE,
+                    VOLUME,
+                    TIMESTAMP
+                FROM MCP_PLATFORM.FINANCE.FINANCIAL_MARKET_DATA_PROCESSED 
+                WHERE TIMESTAMP >= DATEADD(month, -3, CURRENT_DATE())  -- 3 months of data for trends
+                ORDER BY TIMESTAMP DESC, SYMBOL
+                """
+                
+                cursor = self.snowflake_conn.cursor()
+                cursor.execute(query)
+                rows = cursor.fetchall()
+                columns = [desc[0] for desc in cursor.description]
+                df = pd.DataFrame(rows, columns=columns)
+                cursor.close()
+                    
+                print(f"📈 Loaded {len(df)} historical records for trend analysis")
+                return df
+            else:
+                logger.warning("Snowflake connection not available, returning sample trend data")
+                return self._get_sample_trend_data()
+                
+        except Exception as e:
+            logger.error(f"Error loading trend data: {e}")
+            return self._get_sample_trend_data()
+
+
+
+    def _process_financial_trends(self, trend_data: pd.DataFrame) -> Dict[str, Any]:
+        """Process historical data for trend analysis (separate from daily processing)"""
+        try:
+            trend_data = trend_data.copy()
+            trend_data['TIMESTAMP'] = pd.to_datetime(trend_data['TIMESTAMP'])
+            trend_data['DATE'] = trend_data['TIMESTAMP'].dt.date
+            
+            # Group by date for market-level trends
+            daily_market = trend_data.groupby('DATE').agg({
+                'CLOSE': 'mean',
+                'VOLUME': 'sum',
+                'SYMBOL': 'count'
+            }).reset_index()
+            
+            # Calculate market trends
+            daily_market = daily_market.sort_values('DATE')
+            daily_market['price_change'] = daily_market['CLOSE'].pct_change() * 100
+            daily_market['volume_change'] = daily_market['VOLUME'].pct_change() * 100
+            
+            # Prepare market trend data for charts
+            market_trends = []
+            for _, row in daily_market.tail(30).iterrows():  # Last 30 days
+                market_trends.append({
+                    'date': row['DATE'].isoformat(),
+                    'price': round(float(row['CLOSE']), 2),
+                    'volume': int(row['VOLUME']),
+                    'price_change': round(float(row['price_change']), 2) if not pd.isna(row['price_change']) else 0,
+                    'stocks_traded': int(row['SYMBOL'])
+                })
+            
+            # Calculate performance metrics
+            recent_data = daily_market.tail(30)
+            avg_daily_return = recent_data['price_change'].mean()
+            volatility = recent_data['price_change'].std()
+            total_return = ((recent_data['CLOSE'].iloc[-1] - recent_data['CLOSE'].iloc[0]) / recent_data['CLOSE'].iloc[0]) * 100
+            
+            # Individual stock performance for the period
+            stock_trends = []
+            for symbol, symbol_data in trend_data.groupby('SYMBOL'):
+                if len(symbol_data) < 5:  # Need sufficient data
+                    continue
+                    
+                symbol_data = symbol_data.sort_values('TIMESTAMP')
+                start_price = symbol_data['CLOSE'].iloc[0]
+                end_price = symbol_data['CLOSE'].iloc[-1]
+                period_change = ((end_price - start_price) / start_price) * 100
+                
+                stock_trends.append({
+                    'symbol': symbol,
+                    'company': symbol_data['COMPANY_NAME'].iloc[0],
+                    'period_change': round(period_change, 2),
+                    'start_price': round(float(start_price), 2),
+                    'end_price': round(float(end_price), 2),
+                    'volatility': round(symbol_data['CLOSE'].std() / symbol_data['CLOSE'].mean() * 100, 2)
+                })
+            
+            # Sort by performance
+            stock_trends.sort(key=lambda x: x['period_change'], reverse=True)
+            
+            return {
+                'market_trends': market_trends,
+                'performance_metrics': [
+                    {'name': '30-Day Return', 'value': f'{total_return:+.2f}%'},
+                    {'name': 'Avg Daily Return', 'value': f'{avg_daily_return:+.2f}%'},
+                    {'name': 'Volatility', 'value': f'{volatility:.2f}%'},
+                    {'name': 'Best Performer', 'value': f'{stock_trends[0]["symbol"]} ({stock_trends[0]["period_change"]:+.2f}%)'},
+                    {'name': 'Worst Performer', 'value': f'{stock_trends[-1]["symbol"]} ({stock_trends[-1]["period_change"]:+.2f}%)'}
+                ],
+                'trend_indicators': [
+                    {'name': 'Market Trend', 'status': 'Bullish' if total_return > 0 else 'Bearish'},
+                    {'name': 'Volatility Level', 'status': 'High' if volatility > 2 else 'Moderate'},
+                    {'name': 'Momentum', 'status': 'Positive' if avg_daily_return > 0 else 'Negative'}
+                ],
+                'stock_performance': [
+                    {
+                        'symbol': stock['symbol'],
+                        'company': stock['company'],
+                        'change': stock['period_change'],
+                        'volatility': stock['volatility']
+                    } for stock in stock_trends[:15]  # Top 15 performers
+                ],
+                'volatility_data': [
+                    {
+                        'date': day['date'],
+                        'volatility': abs(day['price_change'])
+                    } for day in market_trends
+                ],
+                'moving_averages': self._calculate_moving_averages(market_trends),
+                'sector_performance': self._analyze_sectors(trend_data),
+                'sector_rankings': self._rank_sectors(trend_data)
+            }
+            
+        except Exception as e:
+            logger.error(f"Error processing trend data: {e}")
+            return self._get_sample_trend_analysis()
+
+    def _calculate_moving_averages(self, market_trends: List[Dict]) -> List[Dict]:
+        """Calculate 7-day and 30-day moving averages"""
+        try:
+            ma_data = []
+            for i, day in enumerate(market_trends):
+                if i >= 6:  # 7-day MA requires 7 data points
+                    seven_day_avg = sum(d['price'] for d in market_trends[i-6:i+1]) / 7
+                else:
+                    seven_day_avg = day['price']
+                    
+                if i >= 29:  # 30-day MA requires 30 data points
+                    thirty_day_avg = sum(d['price'] for d in market_trends[i-29:i+1]) / 30
+                else:
+                    thirty_day_avg = day['price']
+                
+                ma_data.append({
+                    'date': day['date'],
+                    'price': day['price'],
+                    'price_7d': round(seven_day_avg, 2),
+                    'price_30d': round(thirty_day_avg, 2)
+                })
+            return ma_data
+        except Exception as e:
+            logger.error(f"Error calculating moving averages: {e}")
+            return []
+
+    def _analyze_sectors(self, trend_data: pd.DataFrame) -> List[Dict]:
+        """Analyze performance by sector (simplified - you might have actual sector data)"""
+        # This is a simplified version - you would map symbols to actual sectors
+        try:
+            # Group by first letter of symbol as a pseudo-sector for demo
+            trend_data['sector'] = trend_data['SYMBOL'].str[0]
+            
+            sector_performance = []
+            for sector, sector_data in trend_data.groupby('sector'):
+                if len(sector_data) < 2:
+                    continue
+                    
+                sector_data = sector_data.sort_values('TIMESTAMP')
+                start_avg = sector_data.groupby('DATE')['CLOSE'].mean().iloc[0]
+                end_avg = sector_data.groupby('DATE')['CLOSE'].mean().iloc[-1]
+                performance = ((end_avg - start_avg) / start_avg) * 100
+                
+                sector_performance.append({
+                    'sector': f"Sector {sector}",
+                    'performance': round(performance, 2),
+                    'stock_count': len(sector_data['SYMBOL'].unique())
+                })
+            
+            return sector_performance
+        except Exception as e:
+            logger.error(f"Error analyzing sectors: {e}")
+            return []
+
+    def _rank_sectors(self, trend_data: pd.DataFrame) -> List[Dict]:
+        """Rank sectors by performance"""
+        sector_data = self._analyze_sectors(trend_data)
+        sector_data.sort(key=lambda x: x['performance'], reverse=True)
+        
+        return [
+            {
+                'name': sector['sector'],
+                'change': sector['performance'],
+                'trend': 'Outperforming' if sector['performance'] > 0 else 'Underperforming'
+            } for sector in sector_data
+        ]
+
+    # Add these sample data methods for fallback
+    def _get_sample_trend_data(self) -> pd.DataFrame:
+        """Generate sample trend data for development"""
+        # Implementation similar to your existing sample data method
+        pass
+        
+    def _get_sample_trend_analysis(self) -> Dict[str, Any]:
+        """Generate sample trend analysis for development"""
+        # Implementation similar to your existing sample method
+        pass

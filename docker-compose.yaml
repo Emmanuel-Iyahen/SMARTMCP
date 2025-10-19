@@ -1,27 +1,16 @@
-version: '3.8'
-
 services:
-  backend:
-    build: ./backend
-    ports:
-      - "8000:8000"
+  airflow:
+    build: ./airflow
+    container_name: airflow
+    restart: always
+    env_file:
+      - .env
     environment:
-      - SNOWFLAKE_ACCOUNT=${SNOWFLAKE_ACCOUNT}
-      - SNOWFLAKE_USER=${SNOWFLAKE_USER}
-      - SNOWFLAKE_PASSWORD=${SNOWFLAKE_PASSWORD}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-    networks:
-      - mcp-network
-
-  frontend:
-    build: ./frontend
+      AIRFLOW__CORE__EXECUTOR: SequentialExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/plugins:/opt/airflow/plugins
     ports:
-      - "3000:3000"
-    depends_on:
-      - backend
-    networks:
-      - mcp-network
-
-networks:
-  mcp-network:
-    driver: bridge
+      - "8080:8080"
+    entrypoint: ["/opt/airflow/entrypoint.sh"]

@@ -127,7 +127,7 @@ class PromptService:
             elif sector == 'transportation':
                 data = await self.data_loader.load_transport_data()
             elif sector == 'finance':
-                data = await self.data_loader.load_financial_data()
+                data = await self.data_loader.load_financial_data_from_snowflake()
             elif sector == 'weather':
                 data = await self.data_loader.load_weather_data()
 
