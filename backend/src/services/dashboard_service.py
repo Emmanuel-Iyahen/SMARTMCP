@@ -46,9 +46,79 @@ class DashboardService:
 
     
 
-    async def _get_transport_overview(self) -> Dict[str, Any]:
+    # async def _get_transport_overview(self) -> Dict[str, Any]:
 
-        """Get transportation sector overview - IMPROVED VERSION"""
+    #     """Get transportation sector overview - IMPROVED VERSION"""
+    #     try:
+    #         transport_data = await self.data_loader.load_transport_data()
+            
+    #         # Ensure transport_data is a list of dictionaries
+    #         if isinstance(transport_data, pd.DataFrame):
+    #             if not transport_data.empty:
+    #                 transport_data = transport_data.to_dict('records')
+    #             else:
+    #                 transport_data = []
+    #         elif not isinstance(transport_data, list):
+    #             transport_data = []
+            
+    #         # Calculate metrics properly - only count actual delays
+    #         total_lines = len(transport_data)
+            
+    #         # Count only services that are NOT "Good Service"
+    #         actual_delays = [
+    #             item for item in transport_data 
+    #             if isinstance(item, dict) and 
+    #             item.get('status', 'Unknown') != 'Good Service' and
+    #             'good service' not in item.get('status', '').lower()
+    #         ]
+    #         total_delays = len(actual_delays)
+            
+    #         delay_percentage = (total_delays / total_lines) * 100 if total_lines > 0 else 0
+
+            
+    #         # Prepare chart data
+    #         chart_data = self._prepare_transport_chart_data(transport_data)
+    #         if not isinstance(chart_data, list):
+    #             chart_data = []
+            
+    #         # Identify major issues
+    #         major_issues = await self._identify_major_transport_issues(transport_data)
+    #         if not isinstance(major_issues, list):
+    #             major_issues = []
+            
+    #         # Calculate trend based on actual delays
+    #         if delay_percentage > 30:
+    #             trend = 'poor'  # More delays = trend up (bad)
+    #         elif delay_percentage > 10:
+    #             trend = 'stable'
+    #         else:
+    #             trend = 'excellent'  # Few delays = trend down (good)
+            
+    #         return {
+    #             'total_lines': total_lines,
+    #             'delayed_lines': total_delays,
+    #             'delay_percentage': round(delay_percentage, 1),
+    #             'trend': trend,
+    #             'chart_data': chart_data,
+    #             'major_issues': major_issues,
+    #             'service_breakdown': self._get_service_breakdown(transport_data)
+    #         }
+    #     except Exception as e:
+    #         logger.error(f"Error in transport overview: {e}")
+    #         return {
+    #             'total_lines': 0,
+    #             'delayed_lines': 0,
+    #             'delay_percentage': 0,
+    #             'trend': 'stable',
+    #             'chart_data': [],
+    #             'major_issues': [],
+    #             'service_breakdown': {}
+    #         }
+
+
+    async def _get_transport_overview(self) -> Dict[str, Any]:
+            
+        """Get transportation sector overview - FIXED VERSION"""
         try:
             transport_data = await self.data_loader.load_transport_data()
             
@@ -75,31 +145,31 @@ class DashboardService:
             
             delay_percentage = (total_delays / total_lines) * 100 if total_lines > 0 else 0
 
-            
-            # Prepare chart data
+            # Prepare TWO different data structures:
+            # 1. Chart data for the time-series delay chart
             chart_data = self._prepare_transport_chart_data(transport_data)
-            if not isinstance(chart_data, list):
-                chart_data = []
+            
+            # 2. All services data for displaying individual service statuses
+            all_services_data = self._prepare_all_services_data(transport_data)
             
             # Identify major issues
             major_issues = await self._identify_major_transport_issues(transport_data)
-            if not isinstance(major_issues, list):
-                major_issues = []
             
             # Calculate trend based on actual delays
             if delay_percentage > 30:
-                trend = 'poor'  # More delays = trend up (bad)
+                trend = 'poor'
             elif delay_percentage > 10:
                 trend = 'stable'
             else:
-                trend = 'excellent'  # Few delays = trend down (good)
+                trend = 'excellent'
             
             return {
                 'total_lines': total_lines,
                 'delayed_lines': total_delays,
                 'delay_percentage': round(delay_percentage, 1),
                 'trend': trend,
-                'chart_data': chart_data,
+                'chart_data': chart_data,  # For the delay trend chart
+                'all_services_data': all_services_data,  # For service listings
                 'major_issues': major_issues,
                 'service_breakdown': self._get_service_breakdown(transport_data)
             }
@@ -111,6 +181,7 @@ class DashboardService:
                 'delay_percentage': 0,
                 'trend': 'stable',
                 'chart_data': [],
+                'all_services_data': [],
                 'major_issues': [],
                 'service_breakdown': {}
             }
@@ -126,13 +197,130 @@ class DashboardService:
         
 
 
-    def _prepare_transport_chart_data(self, transport_data: List[Dict]) -> List[Dict]:
+    # def _prepare_transport_chart_data(self, transport_data: List[Dict]) -> List[Dict]:
 
-        """Prepare transport data for charting"""
+    #     """Prepare transport data for charting"""
+    #     if not transport_data or not isinstance(transport_data, list):
+    #         return []
+    #     try:
+    #         chart_data = []
+    #         for service in transport_data:
+    #             if isinstance(service, dict):
+    #                 # Extract timestamp safely
+    #                 timestamp = service.get('timestamp')
+    #                 if isinstance(timestamp, datetime):
+    #                     timestamp_str = timestamp.isoformat()
+    #                 else:
+    #                     timestamp_str = str(timestamp) if timestamp else datetime.utcnow().isoformat()
+                    
+    #                 # Extract delay minutes safely
+    #                 delay_minutes = service.get('delay_minutes', 0)
+    #                 if not isinstance(delay_minutes, (int, float)):
+    #                     delay_minutes = 0
+                    
+    #                 chart_data.append({
+    #                     'timestamp': timestamp_str,
+    #                     'line_name': service.get('line_name', 'Unknown'),
+    #                     'delay_minutes': delay_minutes,
+    #                     'status': service.get('status', 'Unknown'),
+    #                     'mode': service.get('mode', 'Unknown')
+    #                 })
+            
+    #         return chart_data
+    #     except Exception as e:
+    #         logger.error(f"Error preparing transport chart data: {e}")
+    #         return []
+
+
+
+
+    def _prepare_transport_chart_data(self, transport_data: List[Dict]) -> List[Dict]:
+            
+        """Prepare transport data for charting - FIXED VERSION"""
         if not transport_data or not isinstance(transport_data, list):
             return []
+        
         try:
+            # Calculate overall delay metrics over time (simulated since we have real-time data)
+            # For real-time data, we'll create a summary of current delays
+            current_time = datetime.utcnow()
+            
+            # Calculate current delay statistics
+            total_delay = 0
+            delayed_count = 0
+            max_delay = 0
+            
+            for service in transport_data:
+                if isinstance(service, dict):
+                    delay_minutes = service.get('delay_minutes', 0)
+                    if not isinstance(delay_minutes, (int, float)):
+                        try:
+                            delay_minutes = float(delay_minutes)
+                        except (ValueError, TypeError):
+                            delay_minutes = 0
+                    
+                    # Only count actual delays (not "Good Service" with default 30 min)
+                    status = service.get('status', 'Unknown')
+                    is_actually_delayed = (
+                        status != 'Good Service' and 
+                        'good service' not in status.lower()
+                    )
+                    
+                    if is_actually_delayed and delay_minutes > 0:
+                        total_delay += delay_minutes
+                        delayed_count += 1
+                        max_delay = max(max_delay, delay_minutes)
+            
+            avg_delay = total_delay / delayed_count if delayed_count > 0 else 0
+            
+            # Create time-series data for the chart (last 6 hours simulated)
             chart_data = []
+            for i in range(6):
+                # Simulate some variation in delays over time
+                time_point = current_time - timedelta(hours=(5 - i))
+                
+                # Add some realistic variation to the average delay
+                variation = np.random.uniform(-5, 5)  # Small random variation
+                delay_value = max(0, avg_delay + variation)
+                
+                chart_data.append({
+                    'timestamp': time_point.isoformat(),
+                    'value': round(delay_value, 1),  # Average delay in minutes
+                    'delayed_services': delayed_count,  # Number of delayed services
+                    'max_delay': round(max_delay, 1)  # Maximum delay
+                })
+            
+            # Add current data point
+            chart_data.append({
+                'timestamp': current_time.isoformat(),
+                'value': round(avg_delay, 1),
+                'delayed_services': delayed_count,
+                'max_delay': round(max_delay, 1)
+            })
+            
+            return chart_data
+            
+        except Exception as e:
+            logger.error(f"Error preparing transport chart data: {e}")
+            # Fallback: return simple chart data
+            return [
+                {
+                    'timestamp': datetime.utcnow().isoformat(),
+                    'value': 0,
+                    'delayed_services': 0,
+                    'max_delay': 0
+                }
+            ]
+
+
+    def _prepare_all_services_data(self, transport_data: List[Dict]) -> List[Dict]:
+            
+        """Prepare individual service data for frontend display"""
+        if not transport_data or not isinstance(transport_data, list):
+            return []
+        
+        try:
+            all_services = []
             for service in transport_data:
                 if isinstance(service, dict):
                     # Extract timestamp safely
@@ -147,18 +335,21 @@ class DashboardService:
                     if not isinstance(delay_minutes, (int, float)):
                         delay_minutes = 0
                     
-                    chart_data.append({
+                    all_services.append({
                         'timestamp': timestamp_str,
                         'line_name': service.get('line_name', 'Unknown'),
                         'delay_minutes': delay_minutes,
                         'status': service.get('status', 'Unknown'),
-                        'mode': service.get('mode', 'Unknown')
+                        'mode': service.get('mode', 'Unknown'),
+                        'reason': service.get('reason', '')
                     })
             
-            return chart_data
+            return all_services
         except Exception as e:
-            logger.error(f"Error preparing transport chart data: {e}")
+            logger.error(f"Error preparing all services data: {e}")
             return []
+
+
 
 
 

@@ -18,19 +18,19 @@ def get_data_loader() -> DataLoaderModule:
 async def get_available_data_sources():
     """Get list of available data sources"""
     data_sources = [
-        {
-            "id": "energy",
-            "name": "UK Energy Data",
-            "description": "Real-time energy pricing and consumption data",
-            "provider": "National Grid ESO",
-            "update_frequency": "15 minutes",
-            "endpoints": [
-                "/api/data-sources/energy/latest",
-                "/api/data-sources/energy/historical"
-            ],
-            "available_from": "2020-01-01",
-            "fields": ["timestamp", "price", "energy_type", "region", "demand"]
-        },
+        # {
+        #     "id": "energy",
+        #     "name": "UK Energy Data",
+        #     "description": "Real-time energy pricing and consumption data",
+        #     "provider": "National Grid ESO",
+        #     "update_frequency": "15 minutes",
+        #     "endpoints": [
+        #         "/api/data-sources/energy/latest",
+        #         "/api/data-sources/energy/historical"
+        #     ],
+        #     "available_from": "2020-01-01",
+        #     "fields": ["timestamp", "price", "energy_type", "region", "demand"]
+        # },
         {
             "id": "transportation",
             "name": "Transport for London (TFL) Data",

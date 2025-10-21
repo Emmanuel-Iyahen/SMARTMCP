@@ -74,6 +74,8 @@ class AIAnalyzerModule:
             # Get relevant data
             data = await self._get_sector_data(sector)
 
+            print(data)
+
             if sector == 'finance':
                 # Get latest entry for each symbol
                 limited_data = data.drop_duplicates(subset=['SYMBOL'], keep='first')

@@ -987,12 +987,30 @@ class DataLoaderModule:
 
 
     def _process_financial_trends(self, trend_data: pd.DataFrame) -> Dict[str, Any]:
-        """Process historical data for trend analysis (separate from daily processing)"""
+            
+        """Process historical data for trend analysis - FIXED for available data"""
         try:
+            if trend_data.empty:
+                return self._get_sample_trend_analysis()
+                
             trend_data = trend_data.copy()
             trend_data['TIMESTAMP'] = pd.to_datetime(trend_data['TIMESTAMP'])
             trend_data['DATE'] = trend_data['TIMESTAMP'].dt.date
             
+            print(f"🔍 Trend Analysis - Data Summary:")
+            print(f"   - Total records: {len(trend_data)}")
+            print(f"   - Date range: {trend_data['DATE'].min()} to {trend_data['DATE'].max()}")
+            print(f"   - Unique trading days: {trend_data['DATE'].nunique()}")
+            print(f"   - Unique symbols: {trend_data['SYMBOL'].nunique()}")
+            
+            # Use available days instead of fixed 30-day window
+            available_days = trend_data['DATE'].nunique()
+            analysis_period = min(available_days, 30)  # Use available data, max 30 days
+            
+            if available_days < 5:
+                print(f"⚠️ Insufficient data ({available_days} days) for meaningful trend analysis")
+                return self._get_sample_trend_analysis()
+
             # Group by date for market-level trends
             daily_market = trend_data.groupby('DATE').agg({
                 'CLOSE': 'mean',
@@ -1000,14 +1018,18 @@ class DataLoaderModule:
                 'SYMBOL': 'count'
             }).reset_index()
             
-            # Calculate market trends
             daily_market = daily_market.sort_values('DATE')
+            
+            # Calculate market trends
             daily_market['price_change'] = daily_market['CLOSE'].pct_change() * 100
             daily_market['volume_change'] = daily_market['VOLUME'].pct_change() * 100
             
+            # Use available period for analysis
+            recent_period = daily_market.tail(analysis_period)
+            
             # Prepare market trend data for charts
             market_trends = []
-            for _, row in daily_market.tail(30).iterrows():  # Last 30 days
+            for _, row in recent_period.iterrows():
                 market_trends.append({
                     'date': row['DATE'].isoformat(),
                     'price': round(float(row['CLOSE']), 2),
@@ -1016,48 +1038,72 @@ class DataLoaderModule:
                     'stocks_traded': int(row['SYMBOL'])
                 })
             
-            # Calculate performance metrics
-            recent_data = daily_market.tail(30)
-            avg_daily_return = recent_data['price_change'].mean()
-            volatility = recent_data['price_change'].std()
-            total_return = ((recent_data['CLOSE'].iloc[-1] - recent_data['CLOSE'].iloc[0]) / recent_data['CLOSE'].iloc[0]) * 100
+            # Calculate performance metrics for available period
+            if len(recent_period) >= 2:
+                start_price = recent_period['CLOSE'].iloc[0]
+                end_price = recent_period['CLOSE'].iloc[-1]
+                total_return = ((end_price - start_price) / start_price) * 100 if start_price > 0 else 0
+                avg_daily_return = recent_period['price_change'].mean()
+                volatility = recent_period['price_change'].std()
+            else:
+                total_return = avg_daily_return = volatility = 0
             
-            # Individual stock performance for the period
+            # Individual stock performance for the available period
             stock_trends = []
             for symbol, symbol_data in trend_data.groupby('SYMBOL'):
-                if len(symbol_data) < 5:  # Need sufficient data
-                    continue
-                    
-                symbol_data = symbol_data.sort_values('TIMESTAMP')
-                start_price = symbol_data['CLOSE'].iloc[0]
-                end_price = symbol_data['CLOSE'].iloc[-1]
-                period_change = ((end_price - start_price) / start_price) * 100
+                symbol_data = symbol_data.sort_values('DATE')
+                symbol_recent = symbol_data[symbol_data['DATE'].isin(recent_period['DATE'])]
                 
-                stock_trends.append({
-                    'symbol': symbol,
-                    'company': symbol_data['COMPANY_NAME'].iloc[0],
-                    'period_change': round(period_change, 2),
-                    'start_price': round(float(start_price), 2),
-                    'end_price': round(float(end_price), 2),
-                    'volatility': round(symbol_data['CLOSE'].std() / symbol_data['CLOSE'].mean() * 100, 2)
-                })
+                if len(symbol_recent) >= 2:
+                    symbol_recent = symbol_recent.sort_values('DATE')
+                    start_price = symbol_recent['CLOSE'].iloc[0]
+                    end_price = symbol_recent['CLOSE'].iloc[-1]
+                    
+                    if start_price > 0:
+                        period_change = ((end_price - start_price) / start_price) * 100
+                    else:
+                        period_change = 0
+                    
+                    stock_trends.append({
+                        'symbol': symbol,
+                        'company': symbol_data['COMPANY_NAME'].iloc[0],
+                        'period_change': round(period_change, 2),
+                        'start_price': round(float(start_price), 2),
+                        'end_price': round(float(end_price), 2),
+                        'volatility': round(symbol_recent['CLOSE'].std() / symbol_recent['CLOSE'].mean() * 100, 2) if symbol_recent['CLOSE'].mean() > 0 else 0
+                    })
             
-            # Sort by performance
+            if not stock_trends:
+                return self._get_sample_trend_analysis()
+            
             stock_trends.sort(key=lambda x: x['period_change'], reverse=True)
+            
+            # Update metric names to reflect actual period
+            period_name = f"{analysis_period}-Day" if analysis_period >= 10 else f"{analysis_period}-Day"
+            
+            # Enhanced trend indicators
+            trend_status = "Bullish" if total_return > 2 else "Neutral" if total_return > -2 else "Bearish"
+            volatility_status = "High" if volatility > 3 else "Moderate" if volatility > 1.5 else "Low"
+            momentum_status = "Positive" if avg_daily_return > 0.1 else "Neutral" if avg_daily_return > -0.1 else "Negative"
+            
+            print(f"📊 Calculated Metrics ({period_name} Period):")
+            print(f"   - Return: {total_return:+.2f}%")
+            print(f"   - Avg Daily Return: {avg_daily_return:+.2f}%")
+            print(f"   - Volatility: {volatility:.2f}%")
             
             return {
                 'market_trends': market_trends,
                 'performance_metrics': [
-                    {'name': '30-Day Return', 'value': f'{total_return:+.2f}%'},
+                    {'name': f'{period_name} Return', 'value': f'{total_return:+.2f}%'},
                     {'name': 'Avg Daily Return', 'value': f'{avg_daily_return:+.2f}%'},
                     {'name': 'Volatility', 'value': f'{volatility:.2f}%'},
                     {'name': 'Best Performer', 'value': f'{stock_trends[0]["symbol"]} ({stock_trends[0]["period_change"]:+.2f}%)'},
                     {'name': 'Worst Performer', 'value': f'{stock_trends[-1]["symbol"]} ({stock_trends[-1]["period_change"]:+.2f}%)'}
                 ],
                 'trend_indicators': [
-                    {'name': 'Market Trend', 'status': 'Bullish' if total_return > 0 else 'Bearish'},
-                    {'name': 'Volatility Level', 'status': 'High' if volatility > 2 else 'Moderate'},
-                    {'name': 'Momentum', 'status': 'Positive' if avg_daily_return > 0 else 'Negative'}
+                    {'name': 'Market Trend', 'status': trend_status},
+                    {'name': 'Volatility Level', 'status': volatility_status},
+                    {'name': 'Momentum', 'status': momentum_status}
                 ],
                 'stock_performance': [
                     {
@@ -1065,8 +1111,10 @@ class DataLoaderModule:
                         'company': stock['company'],
                         'change': stock['period_change'],
                         'volatility': stock['volatility']
-                    } for stock in stock_trends[:15]  # Top 15 performers
+                    } for stock in stock_trends
                 ],
+                'analysis_period': period_name,
+                'data_coverage': f"{available_days} days",
                 'volatility_data': [
                     {
                         'date': day['date'],
@@ -1081,6 +1129,9 @@ class DataLoaderModule:
         except Exception as e:
             logger.error(f"Error processing trend data: {e}")
             return self._get_sample_trend_analysis()
+
+
+
 
     def _calculate_moving_averages(self, market_trends: List[Dict]) -> List[Dict]:
         """Calculate 7-day and 30-day moving averages"""
