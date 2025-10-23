@@ -13,7 +13,7 @@ WORKDIR /app
 
 # Copy package files
 COPY package.json package-lock.json ./
-RUN npm ci --silent
+RUN npm ci 
 
 # Copy source code
 COPY public/ ./public/
