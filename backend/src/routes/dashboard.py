@@ -1,15 +1,11 @@
-
 from fastapi import APIRouter, HTTPException, Query, Depends
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta
 import logging
 from services.dashboard_service import DashboardService
-
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-# Remove the circular import - we'll use dependency injection properly
-# Remove: from main import app
 
 # Create a dependency that will be injected at runtime
 def get_dashboard_service() -> DashboardService:
@@ -48,8 +44,6 @@ async def get_sector_dashboard(
             raise HTTPException(status_code=400, detail=f"Invalid sector. Must be one of: {valid_sectors}")
         
         sector_data = await dashboard_service.get_sector_dashboard(sector, timeframe)
-
-        print('sector data here............')
         
         return {
             "status": "success",
@@ -69,35 +63,27 @@ async def get_available_sectors():
     """Get list of available sectors"""
     sectors = [
         {
-            "id": "energy",
-            "name": "Energy",
-            "description": "UK energy pricing and consumption data",
-            "endpoints": ["/api/dashboard/sector/energy", "/api/data-sources/energy"],
-            "available_metrics": ["price", "consumption", "renewable_percentage"]
-        },
-        {
             "id": "transportation",
             "name": "Transportation",
             "description": "TFL transport data and delays",
             "endpoints": ["/api/dashboard/sector/transportation", "/api/data-sources/transportation"],
-            "available_metrics": ["delays", "passenger_count", "service_status"]
+            "available_metrics": ["delays", "service_status"]
         },
         {
             "id": "finance",
             "name": "Finance",
             "description": "UK financial markets and stock data",
             "endpoints": ["/api/dashboard/sector/finance", "/api/data-sources/finance"],
-            "available_metrics": ["stock_prices", "volume", "market_cap"]
+            "available_metrics": ["stock_prices", "volume", "market_trend"]
         },
         {
             "id": "weather",
             "name": "Weather",
             "description": "UK weather data and forecasts",
             "endpoints": ["/api/dashboard/sector/weather", "/api/data-sources/weather"],
-            "available_metrics": ["temperature", "precipitation", "wind_speed"]
+            "available_metrics": ["temperature", "humidity", "condition"]
         }
     ]
-    
     return {
         "status": "success",
         "count": len(sectors),
@@ -112,7 +98,6 @@ async def get_active_alerts(
     try:
         # This would aggregate alerts from all sectors
         overview = await dashboard_service.get_overview()
-        
         alerts = []
         if overview and isinstance(overview, dict):
             for sector, data in overview.items():
@@ -122,7 +107,6 @@ async def get_active_alerts(
                         if isinstance(alert, dict):
                             alert['sector'] = sector
                             alerts.append(alert)
-        
         # Sort by severity
         severity_order = {'critical': 0, 'high': 1, 'warning': 2, 'info': 3}
         alerts.sort(key=lambda x: severity_order.get(x.get('severity', 'info'), 3))
@@ -146,10 +130,6 @@ async def get_key_metrics(
         overview = await dashboard_service.get_overview()
         
         metrics = {
-            "energy": {
-                "current_price": overview.get('energy', {}).get('current_price', 0) if overview else 0,
-                "price_trend": overview.get('energy', {}).get('trend', 'stable') if overview else 'stable'
-            },
             "transportation": {
                 "delay_percentage": overview.get('transportation', {}).get('delay_percentage', 0) if overview else 0,
                 "major_issues": len(overview.get('transportation', {}).get('major_issues', [])) if overview else 0
