@@ -1,8 +1,13 @@
 
 # Build stage
-# FROM node:18-alpine as build
+FROM node:18-alpine as build
 
-FROM node:18-bullseye as build
+
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
+    git
 
 WORKDIR /app
 
