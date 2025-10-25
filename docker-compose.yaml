@@ -34,7 +34,7 @@ services:
     ports:
       - "80:80"
     volumes:
-      - ./build:/usr/share/nginx/html
+      - ./ui-built:/usr/share/nginx/html
       - ./ui/nginx.conf:/etc/nginx/conf.d/default.conf
     depends_on:
       - backend
