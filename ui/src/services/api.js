@@ -2,7 +2,7 @@
 
 import axios from 'axios';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://ec2-3-90-66-92.compute-1.amazonaws.com:8001';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://ec2-44-203-197-2.compute-1.amazonaws.com:8001';
 
 const api = axios.create({
   baseURL: API_BASE_URL,

@@ -460,9 +460,6 @@ async def api_info():
         "mcp_support": True
     }
 
-# Keep all your existing endpoints (test/snowflake-connection, financial-trends, etc.)
-# ... [Your existing endpoints remain unchanged] ...
-
 
 
 # Add the missing financial trends endpoint with proper error handling

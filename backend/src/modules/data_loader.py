@@ -951,7 +951,10 @@ class DataLoaderModule:
     async def load_financial_trend_data(self) -> pd.DataFrame:
         """Load extended historical financial data from Snowflake for trend analysis"""
         try:
-            if hasattr(self, 'snowflake_conn') and self.snowflake_conn:
+            conn = self._init_snowflake()
+
+            if hasattr(self, 'snowflake_conn') and conn:
+                print('new snowflake session successful')
                 query = """
                 SELECT 
                     SYMBOL,
