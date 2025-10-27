@@ -274,7 +274,6 @@ class AIAnalyzerModule:
         try:
             # Import DataLoaderModule directly
             from modules.data_loader import DataLoaderModule
-            
             # Create a new instance of DataLoaderModule
             data_loader = DataLoaderModule()
 
@@ -300,7 +299,6 @@ class AIAnalyzerModule:
                 
                 return real_data
             
-
             elif sector == 'weather':
                 real_data = await data_loader.load_weather_data()
                 print(f"🌤️ AI Analyzer loaded REAL weather data: {len(real_data)} rows")

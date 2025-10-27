@@ -2,7 +2,7 @@
 
 import axios from 'axios';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://ec2-44-203-197-2.compute-1.amazonaws.com:8001';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://smartprojects.dev';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -60,9 +60,9 @@ export const promptService = {
 };
 
 export const dataSourcesService = {
-  getSources: () => api.get('/api/data-sources'),
-  getSourceData: (sourceId) => api.get(`/api/data-sources/${sourceId}/latest`),
-  getSourceStatus: (sourceId) => api.get(`/api/data-sources/${sourceId}/status`),
+  getSources: () => api.get('/api/data-sources/'),
+  getSourceData: (sourceId) => api.get(`/api/data-sources/${sourceId}/latest/`),
+  getSourceStatus: (sourceId) => api.get(`/api/data-sources/${sourceId}/status/`),
   getHistoricalData: (sourceId, startDate, endDate) =>
     api.get(`/api/data-sources/${sourceId}/historical?start_date=${startDate}&end_date=${endDate}`),
 };
