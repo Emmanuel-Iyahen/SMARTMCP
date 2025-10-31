@@ -23,7 +23,7 @@ SmartMCP is a domain-agnostic multi-sector data analysis platform that serves as
 
 ---
 
-**Live Demo:** [Customer App](https://ev-charging-frontend-seven.vercel.app)  
+**Live Demo:** [Customer App](https://smartprojects.dev)  
 
 
 # ARCHITECTURE
@@ -55,8 +55,8 @@ SmartMCP is a domain-agnostic multi-sector data analysis platform that serves as
    - TFL API credentials (optional)
 
 ## 1. Clone the repository
-    git https://github.com/Emmanuel-Iyahen/EV-CHARGING-SYSTEM.git
-    cd cpms-backend
+    git https://github.com/Emmanuel-Iyahen/SMARTMCP.git
+    cd backend
 
 ## 1. Create virtual environment
     virtualenv venv
@@ -91,7 +91,7 @@ No authentication required - returns server capabilities.
         "args": [
             "@modelcontextprotocol/server-smartmcp",
             "--url",
-            "https://your-smartmcp-server.com",
+            "https://smartprojects.dev",
             "--token",
             "your-mcp-api-key"
         ]
@@ -106,7 +106,7 @@ No authentication required - returns server capabilities.
         "smartmcp": {
         "command": "http",
         "args": {
-            "url": "https://your-smartmcp-server.com/.well-known/mcp.json",
+            "url": "https://smartprojects.dev/.well-known/mcp.json",
             "headers": {
             "Authorization": "Bearer your-mcp-api-key"
             }
@@ -140,7 +140,7 @@ No authentication required - returns server capabilities.
                 )
                 return response.json()
     #Usage
-    client = SmartMCPClient("https://your-smartmcp-server.com", "your-api-key")
+    client = SmartMCPClient("https://smartprojects.dev", "your-api-key")
     transport_data = await client.get_transport_data()
 
 
@@ -245,7 +245,7 @@ Dashboard & Analysis
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE ](https://example.com) file for details.
+This project is licensed under the MIT License - see the [LICENSE ](#) file for details.
 ## 🆘 Support
 
  - 📚 Documentation
@@ -254,7 +254,7 @@ This project is licensed under the MIT License - see the [LICENSE ](https://exam
 
  - 💬 Discussions
 
- - 📧 Email: your-email@example.com
+ - 📧 Email: emmanuel_favour@outlook.com
 
 ## 🙏 Acknowledgments
 
