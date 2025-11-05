@@ -462,6 +462,224 @@ async def api_info():
 
 
 
+
+
+import os
+import pandas as pd
+import snowflake.connector
+
+
+def init_snowflake():
+        """Initialize Snowflake connection with environment variables"""
+        try:
+            user = os.getenv("user")
+            password = os.getenv("password")
+            account = os.getenv("account")
+            warehouse = os.getenv("warehouse")
+            database = os.getenv("database")
+            schema = os.getenv("schema")
+
+            if not all([user, password, account]):
+                logger.warning("⚠️ Missing Snowflake credentials in environment variables.")
+                return None
+            
+            #logger.info(f"🔧 Connecting to Snowflake as {user}@{account} [{database}.{schema}]...")
+
+            conn = snowflake.connector.connect(
+                user=user,
+                password=password,
+                account=account,
+                warehouse=warehouse,
+                database=database,
+                schema=schema
+            )
+            logger.info("✅ Successfully connected to Snowflake.")
+            return conn
+
+        except Exception as e:
+            logger.error(f"Failed to connect to Snowflake: {e}")
+            return None
+
+
+
+
+
+@app.get("/api/stock-forecasts")
+async def get_stock_forecasts(symbol: str = None, days: int = 7):
+    """Get stock forecasts from Snowflake"""
+    try:
+        conn = init_snowflake()
+        cursor = conn.cursor()
+        
+        if symbol:
+            query = """
+            SELECT * FROM STOCK_FORECASTS 
+            WHERE SYMBOL = %s 
+            AND FORECAST_DATE >= CURRENT_DATE()
+            ORDER BY FORECAST_DATE
+            LIMIT %s
+            """
+            cursor.execute(query, (symbol, days * 10))  # Buffer for multiple symbols
+        else:
+            query = """
+            SELECT * FROM STOCK_FORECASTS 
+            WHERE GENERATED_AT = (
+                SELECT MAX(GENERATED_AT) FROM STOCK_FORECASTS
+            )
+            AND FORECAST_DATE >= CURRENT_DATE()
+            ORDER BY SYMBOL, FORECAST_DATE
+            """
+            cursor.execute(query)
+        
+        results = cursor.fetchall()
+        columns = [desc[0] for desc in cursor.description]
+        
+        df = pd.DataFrame(results, columns=columns)
+        
+        # Convert to structured format
+        forecasts = {}
+        for symbol in df['SYMBOL'].unique():
+            symbol_data = df[df['SYMBOL'] == symbol]
+            forecasts[symbol] = {
+                'forecasts': symbol_data[[
+                    'FORECAST_DATE', 'FORECAST_PRICE', 
+                    'CONFIDENCE_LOWER', 'CONFIDENCE_UPPER'
+                ]].to_dict('records'),
+                'last_updated': symbol_data['GENERATED_AT'].iloc[0]
+            }
+        
+        return {
+            "status": "success",
+            "data": forecasts,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching forecasts: {str(e)}")
+    finally:
+        if 'conn' in locals():
+            conn.close()
+
+
+
+
+
+@app.get("/api/trading-signals")
+async def get_trading_signals():
+    """Get latest trading signals from Snowflake"""
+    try:
+        conn = init_snowflake()
+        cursor = conn.cursor()
+        
+        query = """
+        SELECT * FROM TRADING_SIGNALS 
+        WHERE GENERATED_AT = (
+            SELECT MAX(GENERATED_AT) FROM TRADING_SIGNALS
+        )
+        ORDER BY 
+            CASE SIGNAL 
+                WHEN 'STRONG_BUY' THEN 1
+                WHEN 'BUY' THEN 2
+                WHEN 'HOLD' THEN 3
+                WHEN 'SELL' THEN 4
+                WHEN 'STRONG_SELL' THEN 5
+                ELSE 6
+            END,
+            ABS(NEXT_DAY_CHANGE_PCT) DESC
+        """
+        
+        cursor.execute(query)
+        results = cursor.fetchall()
+        columns = [desc[0] for desc in cursor.description]
+        
+        signals = pd.DataFrame(results, columns=columns).to_dict('records')
+        
+        return {
+            "status": "success",
+            "data": signals,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching signals: {str(e)}")
+    finally:
+        if 'conn' in locals():
+            conn.close()
+
+
+
+
+
+@app.get("/api/forecast-summary")
+async def get_forecast_summary():
+    """Get forecast summary statistics"""
+    try:
+        conn = init_snowflake()
+        cursor = conn.cursor()
+        
+        # Get signal distribution
+        query = """
+        SELECT 
+            SIGNAL,
+            COUNT(*) as count,
+            AVG(NEXT_DAY_CHANGE_PCT) as avg_next_day_change,
+            AVG(SEVEN_DAY_CHANGE_PCT) as avg_seven_day_change
+        FROM TRADING_SIGNALS 
+        WHERE GENERATED_AT = (
+            SELECT MAX(GENERATED_AT) FROM TRADING_SIGNALS
+        )
+        GROUP BY SIGNAL
+        """
+        
+        cursor.execute(query)
+        signal_stats = cursor.fetchall()
+        
+        # Get trend distribution
+        trend_query = """
+        SELECT 
+            TREND,
+            COUNT(*) as count
+        FROM TRADING_SIGNALS 
+        WHERE GENERATED_AT = (
+            SELECT MAX(GENERATED_AT) FROM TRADING_SIGNALS
+        )
+        GROUP BY TREND
+        """
+        
+        cursor.execute(trend_query)
+        trend_stats = cursor.fetchall()
+        
+        return {
+            "status": "success",
+            "data": {
+                "signal_distribution": [
+                    {"signal": row[0], "count": row[1], "avg_next_day": row[2], "avg_seven_day": row[3]}
+                    for row in signal_stats
+                ],
+                "trend_distribution": [
+                    {"trend": row[0], "count": row[1]}
+                    for row in trend_stats
+                ],
+                "total_stocks": sum(row[1] for row in signal_stats),
+                "last_updated": datetime.now().isoformat()
+            }
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching summary: {str(e)}")
+    finally:
+        if 'conn' in locals():
+            conn.close()
+
+
+
+
+
+
+
+
+
+
 # Add the missing financial trends endpoint with proper error handling
 @app.get("/api/financial-trends", response_model=FinancialTrendResponse)
 async def get_financial_trends(request: Request):
